@@ -73,64 +73,65 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white py-12 px-6">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-5xl font-bold text-center mb-4">
-          Binance Spot ↔ Hyperliquid 아비트라지 대시보드
-        </h1>
-        <p className="text-center text-gray-400 mb-10 text-lg">
-          실시간 가격 비교 | 업데이트: {lastUpdate}
-        </p>
+  <div className="min-h-screen bg-black text-white py-8 px-4">  {/* 배경 완전 검정 */}
+    <div className="max-w-5xl mx-auto">
+      {/* 제목 - 그라데이션 효과 */}
+      <h1 className="text-4xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-red-400 bg-clip-text text-transparent">
+        Funding & Premium Gap Dashboard
+      </h1>
+      <p className="text-center text-gray-400 mb-10 text-lg">
+        Hyperliquid Perpetual 실시간 데이터 | 업데이트: {lastUpdate}
+      </p>
 
-        {error && (
-          <div className="text-center text-red-400 mb-8 p-4 bg-red-900/20 rounded-lg">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="text-center text-red-400 p-4 bg-red-900/20 rounded-lg mb-8">
+          {error}
+        </div>
+      )}
 
-        {loading && data.length === 0 ? (
-          <div className="text-center text-2xl py-20">가격 불러오는 중...</div>
-        ) : (
-          <div className="overflow-x-auto rounded-xl shadow-2xl">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-gradient-to-r from-blue-900 to-purple-900">
-                <tr>
-                  <th className="p-6 text-lg font-semibold">코인</th>
-                  <th className="p-6 text-lg font-semibold text-right">Binance Spot</th>
-                  <th className="p-6 text-lg font-semibold text-right">Hyperliquid</th>
-                  <th className="p-6 text-lg font-semibold text-right">차이 (%)</th>
+      {loading && data.length === 0 ? (
+        <div className="text-center text-2xl py-20 text-gray-400">Loading data...</div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-800 shadow-2xl">  {/* 테이블 외곽 테두리 */}
+          <table className="w-full">
+            <thead className="bg-gray-900/50">  {/* 헤더 약간 투명 */}
+              <tr>
+                <th className="p-5 text-left text-sm uppercase tracking-wider text-gray-400">Coin</th>
+                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Mark Price</th>
+                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Open Interest</th>
+                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Funding (%)</th>
+                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400 font-bold text-yellow-300">Premium Gap (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, index) => (
+                <tr key={item.coin} className={`border-t border-gray-800 ${index % 2 === 0 ? 'bg-gray-900/20' : ''} hover:bg-gray-800/50 transition`}>
+                  <td className="p-5 font-bold text-2xl">{item.coin}</td>
+                  <td className="p-5 text-right font-mono text-lg">${item.markPrice}</td>
+                  <td className="p-5 text-right font-mono text-lg">${item.openInterest}</td>
+                  <td className={`p-5 text-right font-mono text-lg ${parseFloat(item.fundingRate) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {item.fundingRate}%
+                  </td>
+                  <td className={`p-5 text-right text-3xl font-bold ${
+                    Math.abs(parseFloat(item.premium)) > 0.05
+                      ? parseFloat(item.premium) > 0
+                        ? 'text-red-400'
+                        : 'text-green-400'
+                      : 'text-gray-500'
+                  }`}>
+                    {item.premium}%
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.map(item => (
-                  <tr key={item.symbol} className="border-b border-gray-800 hover:bg-gray-900 transition">
-                    <td className="p-6 font-bold text-xl">{item.symbol}/USDT</td>
-                    <td className="p-6 text-right font-mono">
-                      {item.binancePrice ? `$${item.binancePrice.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="p-6 text-right font-mono">
-                      {item.hyperPrice ? `$${item.hyperPrice.toFixed(2)}` : '-'}
-                    </td>
-                    <td className={`p-6 text-right text-xl font-bold ${
-                      item.diffPercent && Math.abs(item.diffPercent) >= 0.3
-                        ? item.diffPercent > 0
-                          ? 'text-red-400'  // Binance 더 비쌀 때 (김치 프리미엄)
-                          : 'text-green-400'
-                        : 'text-gray-500'
-                    }`}>
-                      {item.diffPercent !== null ? `${item.diffPercent.toFixed(2)}%` : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        <p className="text-center mt-12 text-sm text-gray-500">
-          참고용 데이터 | 출처: Binance Spot API & Hyperliquid API
-        </p>
-      </div>
+      <p className="text-center mt-12 text-sm text-gray-600">
+        Data from Hyperliquid Public API | For reference only
+      </p>
     </div>
-  );
+  </div>
+);
 }
