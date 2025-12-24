@@ -28,7 +28,7 @@ export default function Page() {
       // 2. Binance Spot 여러 코인 가격 한 번에 가져오기
       const usdtPairs = coins.map(coin => `${coin}USDT`);
       const binanceRes = await fetch(
-        `https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(usdtPairs)}`
+        `https://fapi.binance.com/fapi/v1/ticker/price?symbols=${JSON.stringify(usdtPairs)}`
       );
       const binanceJson = await binanceRes.json(); // 배열
 
