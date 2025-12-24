@@ -3,63 +3,62 @@
 import { useState, useEffect } from 'react';
 
 export default function Page() {
-  // Hyperliquid 지원 주요 코인 (USDT 페어)
-  const coins = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX', 'LINK', 'BNB', 'ADA', 'TRX', 'LIT'];
-
-  const [data, setData] = useState([]);
+  const [hlPrice, setHlPrice] = useState(null);
+  const [binPrice, setBinPrice] = useState(null);
+  const [premiumGap, setPremiumGap] = useState(null);
+  const [hlFunding, setHlFunding] = useState(null);
+  const [binFunding, setBinFunding] = useState(null);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState('');
 
-  const fetchPrices = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    setError(null);
-
     try {
-      // 1. Hyperliquid allMids (mid price) 한 번에 가져오기
+      // Hyperliquid LIT 데이터 (allMids + funding)
       const hyperRes = await fetch('https://api.hyperliquid.xyz/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'allMids' }),
       });
-      const hyperJson = await hyperRes.json();
-      const hyperMids = hyperJson; // { "BTC": "71234.5", ... }
+      const mids = await hyperRes.json();
+      const hlMid = mids['LIT'] ? parseFloat(mids['LIT']) : null;
 
-      // 2. Binance Spot 여러 코인 가격 한 번에 가져오기
-      const usdtPairs = coins.map(coin => `${coin}USDT`);
-      const binanceRes = await fetch(
-        `https://fapi.binance.com/fapi/v1/ticker/price?symbols=${JSON.stringify(usdtPairs)}`
-      );
-      const binanceJson = await binanceRes.json(); // 배열
+      const fundingRes = await fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'fundingDashboard' }),
+      });
+      const fundingData = await fundingRes.json();
+      const litFundingItem = fundingData.find(item => item.asset === 'LIT');
+      const hlFundRate = litFundingItem ? parseFloat(litFundingItem.funding) * 100 : null; // %로 변환
 
-      const binanceMap = {};
-      binanceJson.forEach(item => {
-        const coin = item.symbol.replace('USDT', '');
-        binanceMap[coin] = parseFloat(item.price);
+      // Binance LITUSDT Perpetual 가격 + 펀딩비
+      const binPriceRes = await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=LITUSDT');
+      const binPriceJson = await binPriceRes.json();
+      const binP = parseFloat(binPriceJson.price);
+
+      const binFundingRes = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=LITUSDT');
+      const binFundingJson = await binFundingRes.json();
+      const binFundRate = parseFloat(binFundingJson.lastFundingRate) * 100;
+
+      // 계산
+      const gap = hlMid && binP ? ((binP - hlMid) / hlMid) * 100 : null;
+
+      // 히스토리 업데이트 (최대 200포인트)
+      setHistory(prev => {
+        const newPoint = gap !== null ? gap.toFixed(4) : null;
+        const newHistory = [...prev, newPoint].slice(-200);
+        return newHistory;
       });
 
-      // 3. 데이터 합치기
-      const newData = coins.map(coin => {
-        const hyperPrice = hyperMids[coin] ? parseFloat(hyperMids[coin]) : null;
-        const binancePrice = binanceMap[coin] || null;
-
-        let diffPercent = null;
-        if (binancePrice && hyperPrice && hyperPrice !== 0) {
-          diffPercent = ((binancePrice - hyperPrice) / hyperPrice) * 100;
-        }
-
-        return {
-          symbol: coin,
-          binancePrice,
-          hyperPrice,
-          diffPercent,
-        };
-      });
-
-      setData(newData);
+      setHlPrice(hlMid);
+      setBinPrice(binP);
+      setPremiumGap(gap);
+      setHlFunding(hlFundRate);
+      setBinFunding(binFundRate);
       setLastUpdate(new Date().toLocaleTimeString('ko-KR'));
     } catch (err) {
-      setError('가격 정보를 불러오지 못했습니다. 네트워크나 API 확인해주세요.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -67,71 +66,114 @@ export default function Page() {
   };
 
   useEffect(() => {
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 8000); // 8초마다 갱신
+    fetchData();
+    const interval = setInterval(fetchData, 8000); // 8초 갱신
     return () => clearInterval(interval);
   }, []);
 
+  // 간단한 라인 그래프 SVG (히스토리 데이터로 그림)
+  const Graph = () => {
+    if (history.length < 2) return <div className="h-32 bg-gray-900/50 rounded"></div>;
+
+    const min = Math.min(...history.filter(v => v !== null));
+    const max = Math.max(...history.filter(v => v !== null));
+    const range = max - min || 1;
+    const points = history.map((val, i) => {
+      if (val === null) return '';
+      const x = (i / (history.length - 1)) * 100;
+      const y = 100 - ((val - min) / range) * 100;
+      return `${x},${y}`;
+    }).filter(p => p).join(' ');
+
+    return (
+      <svg className="w-full h-32" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#00ffaa" strokeWidth="2" points={points} />
+      </svg>
+    );
+  };
+
   return (
-  <div className="min-h-screen bg-black text-white py-8 px-4">  {/* 배경 완전 검정 */}
-    <div className="max-w-5xl mx-auto">
-      {/* 제목 - 그라데이션 효과 */}
-      <h1 className="text-4xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-red-400 bg-clip-text text-transparent">
-        Funding & Premium Gap Dashboard
-      </h1>
-      <p className="text-center text-gray-400 mb-10 text-lg">
-        Hyperliquid Perpetual 실시간 데이터 | 업데이트: {lastUpdate}
-      </p>
-
-      {error && (
-        <div className="text-center text-red-400 p-4 bg-red-900/20 rounded-lg mb-8">
-          {error}
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-5xl mx-auto p-4">
+        {/* 상단 헤더 */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">LIT ARBITRAGE <span className="text-xs bg-gray-700 px-2 py-1 rounded">PRO</span></h1>
+          <div className="text-right text-sm text-gray-400">
+            ZEN | Alert &gt; 1 %
+          </div>
         </div>
-      )}
 
-      {loading && data.length === 0 ? (
-        <div className="text-center text-2xl py-20 text-gray-400">Loading data...</div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-800 shadow-2xl">  {/* 테이블 외곽 테두리 */}
-          <table className="w-full">
-            <thead className="bg-gray-900/50">  {/* 헤더 약간 투명 */}
-              <tr>
-                <th className="p-5 text-left text-sm uppercase tracking-wider text-gray-400">Coin</th>
-                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Mark Price</th>
-                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Open Interest</th>
-                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400">Funding (%)</th>
-                <th className="p-5 text-right text-sm uppercase tracking-wider text-gray-400 font-bold text-yellow-300">Premium Gap (%)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((item, index) => (
-                <tr key={item.coin} className={`border-t border-gray-800 ${index % 2 === 0 ? 'bg-gray-900/20' : ''} hover:bg-gray-800/50 transition`}>
-                  <td className="p-5 font-bold text-2xl">{item.coin}</td>
-                  <td className="p-5 text-right font-mono text-lg">${item.markPrice}</td>
-                  <td className="p-5 text-right font-mono text-lg">${item.openInterest}</td>
-                  <td className={`p-5 text-right font-mono text-lg ${parseFloat(item.fundingRate) > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {item.fundingRate}%
-                  </td>
-                  <td className={`p-5 text-right text-3xl font-bold ${
-                    Math.abs(parseFloat(item.premium)) > 0.05
-                      ? parseFloat(item.premium) > 0
-                        ? 'text-red-400'
-                        : 'text-green-400'
-                      : 'text-gray-500'
-                  }`}>
-                    {item.premium}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* 메인 카드 */}
+        <div className="bg-gray-900/50 rounded-2xl border border-gray-800 p-6 mb-6">
+          <div className="grid grid-cols-3 gap-4 items-center text-center">
+            {/* Hyperliquid */}
+            <div>
+              <div className="text-cyan-400 text-sm mb-1">HL</div>
+              <div className="text-4xl font-bold">
+                {loading ? '-' : hlPrice ? hlPrice.toFixed(4) : '-'}
+              </div>
+              <div className="text-green-400 text-sm mt-1">
+                Funding {loading ? '-' : hlFunding ? hlFunding.toFixed(4) + '%' : '-'}
+              </div>
+            </div>
+
+            {/* Premium Gap */}
+            <div>
+              <div className="text-gray-400 text-sm mb-2">PREMIUM GAP</div>
+              <div className={`text-5xl font-bold ${premiumGap > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {loading ? '-' : premiumGap !== null ? (premiumGap > 0 ? '+' : '') + premiumGap.toFixed(2) + '%' : '-'}
+              </div>
+              <div className="text-gray-400 text-sm mt-2">SHORT HL / LONG BIN</div>
+            </div>
+
+            {/* Binance */}
+            <div>
+              <div className="text-orange-400 text-sm mb-1">BN</div>
+              <div className="text-4xl font-bold">
+                {loading ? '-' : binPrice ? binPrice.toFixed(4) : '-'}
+              </div>
+              <div className="text-green-400 text-sm mt-1">
+                Funding {loading ? '-' : binFunding ? binFunding.toFixed(4) + '%' : '-'}
+              </div>
+            </div>
+          </div>
+
+          {/* 히스토리 그래프 */}
+          <div className="mt-8">
+            <div className="text-gray-400 text-sm mb-2">History (200 pts)</div>
+            <div className="bg-gray-900/50 rounded-lg overflow-hidden">
+              <Graph />
+            </div>
+          </div>
+
+          {/* 하단 정보 */}
+          <div className="grid grid-cols-3 gap-4 mt-8 text-center">
+            <div>
+              <div className="text-orange-400 text-sm">POINT</div>
+              <div className="text-xl font-bold">LIT (HL) x 20</div>
+            </div>
+            <div>
+              <div className="text-4xl font-bold">$68.33</div>
+              <div className="text-cyan-400 text-sm">APR Yield Diff</div>
+            </div>
+            <div>
+              <div className="text-xl font-bold">0.61%</div>
+            </div>
+          </div>
         </div>
-      )}
 
-      <p className="text-center mt-12 text-sm text-gray-600">
-        Data from Hyperliquid Public API | For reference only
-      </p>
+        {/* 계산기 버튼 */}
+        <div className="text-center">
+          <button className="bg-gray-800 hover:bg-gray-700 px-12 py-4 rounded-full text-xl font-semibold transition">
+            OPEN CALCULATOR
+          </button>
+        </div>
+
+        {/* 푸터 */}
+        <p className="text-center text-gray-600 text-sm mt-8">
+          Data: 3s refresh | Source: Hyperliquid / Binance
+        </p>
+      </div>
     </div>
-  </div>
-);
+  );
 }
