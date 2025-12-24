@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 
 export default function Page() {
   // Hyperliquid 지원 주요 코인 (USDT 페어)
-  const coins = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX', 'LINK', 'BNB', 'ADA', 'TRX'];
+  const coins = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX', 'LINK', 'BNB', 'ADA', 'TRX', 'LIT'];
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
